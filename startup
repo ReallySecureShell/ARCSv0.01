@@ -171,8 +171,10 @@ while true do
 			else
 				attachToReactor()
 				if not reactor then
+					print('[WARN] No reactor found or reactor structure invalid. Waiting for valid reactor structure...')
 					searchForReactorInterval = os.startTimer(5)
 				else
+					print('[INFO] Adjusted control rods for new reactor configuration.')
 					reactorAdjustmentInterval = os.startTimer(1)
 				end
 			end
