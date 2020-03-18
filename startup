@@ -1,38 +1,39 @@
-# vim: syntax=lua
-
--- GLOBAL VARIABLES
-controlRodsArray = {}
-
-configuration = {}
---
-
 -- BigReactors API can be found here: https://ftbwiki.org/Reactor_Computer_Port
-
--- Possibly how RF generation is calculated: https://github.com/erogenousbeef/BigReactors/blob/master/src/main/java/erogenousbeef/bigreactors/utils/StaticUtils.java
 
 print("Automated Reactor Control System v0.01-Alpha")
 
-function getReactorConfiguration()
-    print('[INFO] Gathering data on reactor configuration...')
-    
-    -- Make the array for indexing reactor control rods
-    print('[INFO] Indexing control rods')
+function isReactorStructureValid()
+	-- The below will throw an error if the reactor does not have any control rods
+	if reactor.getNumberOfControlRods() == 0 then
+		error("Invalid Reactor")
+	end
+end
+
+function configureReactor()
+	controlRodsArray = {}
+	configuration = {}
+	
+	-- Make the array for indexing reactor control rods
+	print('[INFO] Indexing control rods')
 	for intControlRod=0,reactor.getNumberOfControlRods()-1,1 do
 		controlRodsArray[intControlRod] = intControlRod
+		reactor.setControlRodLevel(intControlRod,reactor.getControlRodLevel(0))
 	end
-
+	
+	numberOfControlRods = reactor.getNumberOfControlRods()
+	
 	-- Check if a disk drive is present.
 	if not fs.isDir("disk/") then
 		configurationName = "arcs.config"
 	else
 		configurationName = "disk/arcs.config"
 	end
-
+	
 	if not fs.exists(configurationName) then
 		print('[INFO] Creating configuration file: ',configurationName)
 		configurationIO = io.open(configurationName,"w")
 		io.output(configurationIO)
-
+		
 		writeConfiguration = [[
 # The amount in RF that the reactor's buffer is allowed to deviate
 # before the program adjusts the buffer back to half-full. The drift 
@@ -56,17 +57,17 @@ adjustmentThreshold = 1000
 controlRodAdjustmentAmount = 1
 ]]
 		io.write(writeConfiguration)
-
+	
 		io.close()
 		
 		writeConfiguration = nil
 	end
-
+	
 	print('[INFO] Loading values from configuration file: ', configurationName)
-
+	
 	configurationIO = io.open(configurationName,"r")
 	io.input(configurationIO)
- 
+	
 	for line in configurationIO:lines() do
 		for string in string.gmatch(line,"= (.*)") do
 			table.insert(configuration,tonumber(string))
@@ -76,31 +77,22 @@ controlRodAdjustmentAmount = 1
 	io.close()
 end
 
-function error()
-    reactor.setAllControlRodLevels(0)
-end
-
 -- Search for peripherals
-function findPeripherals()
+function attachToReactor()
 	for _,side in pairs(peripheral.getNames()) do
 		if(peripheral.getType(side) == 'BigReactors-Reactor') then
-			print('[INFO] Wrapping to reactor on ',side,' side.')
 			reactor = peripheral.wrap(side)
-			if pcall(error) then
-                reactorSide = side
-                getReactorConfiguration()
-            else
-                reactor = nil
-            end
+			if pcall(isReactorStructureValid) then
+				print('[INFO] Wrapping to reactor on ',side,' side.')
+				reactorSide = side
+				configureReactor()
+			else
+				reactor = nil
+			end
 		end
 	end
-
-	if not reactor then
-		print('[WARN] No reactor found. Halting until one is connected...')
-		haltProgram = true
-	end
 end
-findPeripherals()
+attachToReactor()
 
 function calculateFluctuation(rfGeneration,previousInternalBufferValue)
 	-- Set the sleep statement equal to 1 tick.
@@ -108,58 +100,82 @@ function calculateFluctuation(rfGeneration,previousInternalBufferValue)
 	return reactor.getEnergyStored() - previousInternalBufferValue
 end
 
-local timeEvent = os.startTimer(1)
+if not reactor then
+	print('[WARN] No reactor found or reactor structure invalid. Waiting for valid reactor structure...')
+	searchForReactorInterval = os.startTimer(5)
+else
+	print('[INFO] Reactor configured successfully.')
+	reactorAdjustmentInterval = os.startTimer(1)
+end
 
 while true do
 	local event,data1 = os.pullEventRaw()
-
+	
 	if event == "terminate" then
 		print('Caught terminate event')
 		reactor = nil
+		reactorSide = nil
 		return
-
-	elseif event == "peripheral" then
-        findPeripherals()
-        if reactor then
-            haltProgram = nil
-            print('[INFO] Reactor connected. Resuming execution.')
-            timeEvent = os.startTimer(1)
-        end
-        
+		
 	elseif event == "peripheral_detach" then
 		if data1 == reactorSide then
-			print('[WARN] Reactor detached. Halting program.')
-			haltProgram = true
+			print('[WARN] Reactor detached.')
+			reactor = nil
+			searchForReactorInterval = os.startTimer(5)
 		end
-
-	elseif event == "timer" and not haltProgram then
-		if data1 == timeEvent then
-			fluctuation = calculateFluctuation(reactor.getEnergyProducedLastTick(),reactor.getEnergyStored())
-
-			-- If current energy level is greater than half + Threshold,
-			-- reduce power output.
-			if reactor.getEnergyStored() > 5000000 + configuration[1] then
-				-- Repeat until fluctuation is less-than negative configuration[2].
-				if fluctuation > configuration[2]-(configuration[2]*2) then
-					for _,controlRod in pairs(controlRodsArray) do
-						if reactor.getControlRodLevel(controlRod) + configuration[3] <= 100 then
+		
+	elseif event == "timer" and not reactor then
+		if data1 == searchForReactorInterval then
+			attachToReactor()
+			if not reactor then
+				searchForReactorInterval = os.startTimer(5)
+			else
+				print('[INFO] Reactor configured successfully.')
+				reactorAdjustmentInterval = os.startTimer(1)
+			end
+		end
+		
+	elseif event == "timer" and reactor then
+		if data1 == reactorAdjustmentInterval then
+			function adjustReactorOutput()
+				fluctuation = calculateFluctuation(reactor.getEnergyProducedLastTick(),reactor.getEnergyStored())
+				
+				-- If current energy level is greater than half + Threshold,
+				-- reduce power output.
+				if reactor.getEnergyStored() > 5000000 + configuration[1] then
+					-- Repeat until fluctuation is less-than negative configuration[2].
+					if fluctuation > configuration[2]-(configuration[2]*2) then
+						for _,controlRod in pairs(controlRodsArray) do
+							if reactor.getControlRodLevel(controlRod) + configuration[3] <= 100 then
 							reactor.setControlRodLevel(controlRod,reactor.getControlRodLevel(controlRod) + configuration[3])
+							end
 						end
 					end
-				end
-
-			-- If current energy level is less than half - Threshold,
-			-- increse power output.
-			elseif reactor.getEnergyStored() < 5000000 - configuration[1] then
-				if fluctuation < configuration[2] then
-					for _,controlRod in pairs(controlRodsArray) do
-						if reactor.getControlRodLevel(controlRod) - configuration[3] >= 0 then
-							reactor.setControlRodLevel(controlRod,reactor.getControlRodLevel(controlRod) - configuration[3])
+					
+				-- If current energy level is less than half - Threshold,
+				-- increase power output.
+				elseif reactor.getEnergyStored() < 5000000 - configuration[1] then
+					if fluctuation < configuration[2] then
+						for _,controlRod in pairs(controlRodsArray) do
+							if reactor.getControlRodLevel(controlRod) - configuration[3] >= 0 then
+								reactor.setControlRodLevel(controlRod,reactor.getControlRodLevel(controlRod) - configuration[3])
+							end
 						end
 					end
 				end
 			end
-			timeEvent = os.startTimer(1)
+			
+			if reactor.getNumberOfControlRods() == numberOfControlRods then
+				pcall(adjustReactorOutput)
+				reactorAdjustmentInterval = os.startTimer(1)
+			else
+				attachToReactor()
+				if not reactor then
+					searchForReactorInterval = os.startTimer(5)
+				else
+					reactorAdjustmentInterval = os.startTimer(1)
+				end
+			end
 		end
 	end
 end
