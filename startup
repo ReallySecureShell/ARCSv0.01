@@ -76,20 +76,27 @@ controlRodAdjustmentAmount = 1
 	io.close()
 end
 
+function error()
+    reactor.setAllControlRodLevels(0)
+end
+
 -- Search for peripherals
 function findPeripherals()
 	for _,side in pairs(peripheral.getNames()) do
 		if(peripheral.getType(side) == 'BigReactors-Reactor') then
 			print('[INFO] Wrapping to reactor on ',side,' side.')
 			reactor = peripheral.wrap(side)
-			reactorSide = side
-			getReactorConfiguration()
+			if pcall(error) then
+                reactorSide = side
+                getReactorConfiguration()
+            else
+                reactor = nil
+            end
 		end
 	end
-  
+
 	if not reactor then
 		print('[WARN] No reactor found. Halting until one is connected...')
-		reactor = nil
 		haltProgram = true
 	end
 end
@@ -100,8 +107,6 @@ function calculateFluctuation(rfGeneration,previousInternalBufferValue)
 	sleep(0.050)
 	return reactor.getEnergyStored() - previousInternalBufferValue
 end
-
-print('[INFO] Setup complete. Executing main program loop')
 
 local timeEvent = os.startTimer(1)
 
@@ -114,9 +119,12 @@ while true do
 		return
 
 	elseif event == "peripheral" then
-		findPeripherals()
-		haltProgram = nil
-		timeEvent = os.startTimer(1)
+        findPeripherals()
+        if reactor then
+            haltProgram = nil
+            print('[INFO] Reactor connected. Resuming execution.')
+            timeEvent = os.startTimer(1)
+        end
         
 	elseif event == "peripheral_detach" then
 		if data1 == reactorSide then
@@ -155,4 +163,3 @@ while true do
 		end
 	end
 end
-
