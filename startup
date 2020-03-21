@@ -1,26 +1,13 @@
 -- BigReactors API can be found here: https://ftbwiki.org/Reactor_Computer_Port
 
+-- ESSENTIAL ARRAY(s)
+controlRodsArray = {}
+--
+
 print("Automated Reactor Control System v0.01-Alpha")
 
-function isReactorStructureValid()
-	-- The below will throw an error if the reactor does not have any control rods
-	if reactor.getNumberOfControlRods() == 0 then
-		error("Invalid Reactor")
-	end
-end
-
-function configureReactor()
-	controlRodsArray = {}
+function loadConfigurationSettings()
 	configuration = {}
-	
-	-- Make the array for indexing reactor control rods
-	print('[INFO] Indexing control rods')
-	for intControlRod=0,reactor.getNumberOfControlRods()-1,1 do
-		controlRodsArray[intControlRod] = intControlRod
-		reactor.setControlRodLevel(intControlRod,reactor.getControlRodLevel(0))
-	end
-	
-	numberOfControlRods = reactor.getNumberOfControlRods()
 	
 	-- Check if a disk drive is present.
 	if not fs.isDir("disk/") then
@@ -63,7 +50,7 @@ controlRodAdjustmentAmount = 1
 		writeConfiguration = nil
 	end
 	
-	print('[INFO] Loading values from configuration file: ', configurationName)
+	print('[INFO] Loading configuration from file: ', configurationName)
 	
 	configurationIO = io.open(configurationName,"r")
 	io.input(configurationIO)
@@ -76,6 +63,39 @@ controlRodAdjustmentAmount = 1
 	
 	io.close()
 end
+loadConfigurationSettings()
+
+function modifyControlRodIndex()
+	-- Make the array for indexing reactor control rods
+	print('[INFO] Indexing control rods')
+	
+	if table.getn(controlRodsArray) == 0 then
+		for intControlRod=0,reactor.getNumberOfControlRods()-1,1 do
+			controlRodsArray[intControlRod+1] = intControlRod
+			reactor.setControlRodLevel(intControlRod,reactor.getControlRodLevel(0))
+		end
+	else
+		-- If current number of control rods are greater than the amount in the array, add however many control rods we're missing.
+		if reactor.getNumberOfControlRods() > table.getn(controlRodsArray) then
+			for intControlRod=1,reactor.getNumberOfControlRods() - table.getn(controlRodsArray),1 do
+				table.insert(controlRodsArray,table.getn(controlRodsArray))
+				reactor.setControlRodLevel(intControlRod,reactor.getControlRodLevel(0))
+			end
+		-- If current number of control rods are less than the amount in the array, remove control rods from the array starting at the end.
+		elseif reactor.getNumberOfControlRods() < table.getn(controlRodsArray) then
+			for intControlRod=1,table.getn(controlRodsArray) - reactor.getNumberOfControlRods(),1 do
+				table.remove(controlRodsArray)
+			end
+		end
+	end
+end
+
+function isReactorStructureValid()
+	-- The below will throw an error if the reactor does not have any control rods
+	if reactor.getNumberOfControlRods() == 0 then
+		error("Invalid Reactor")
+	end
+end
 
 -- Search for peripherals
 function attachToReactor()
@@ -85,7 +105,10 @@ function attachToReactor()
 			if pcall(isReactorStructureValid) then
 				print('[INFO] Wrapping to reactor on ',side,' side.')
 				reactorSide = side
-				configureReactor()
+				if not reactor.getActive() then
+					reactor.setActive(true)
+				end
+				print('[INFO] Reactor structure is valid.')
 			else
 				reactor = nil
 			end
@@ -104,7 +127,6 @@ if not reactor then
 	print('[WARN] No reactor found or reactor structure invalid. Waiting for valid reactor structure...')
 	searchForReactorInterval = os.startTimer(5)
 else
-	print('[INFO] Reactor configured successfully.')
 	reactorAdjustmentInterval = os.startTimer(1)
 end
 
@@ -119,7 +141,7 @@ while true do
 		
 	elseif event == "peripheral_detach" then
 		if data1 == reactorSide then
-			print('[WARN] Reactor detached.')
+			print('[WARN] Reactor computer port detached.')
 			reactor = nil
 			searchForReactorInterval = os.startTimer(5)
 		end
@@ -130,7 +152,6 @@ while true do
 			if not reactor then
 				searchForReactorInterval = os.startTimer(5)
 			else
-				print('[INFO] Reactor configured successfully.')
 				reactorAdjustmentInterval = os.startTimer(1)
 			end
 		end
@@ -165,17 +186,18 @@ while true do
 				end
 			end
 			
-			if reactor.getNumberOfControlRods() == numberOfControlRods then
+			if reactor.getNumberOfControlRods() == table.getn(controlRodsArray) then
 				pcall(adjustReactorOutput)
 				reactorAdjustmentInterval = os.startTimer(1)
 			else
-				attachToReactor()
-				if not reactor then
-					print('[WARN] No reactor found or reactor structure invalid. Waiting for valid reactor structure...')
-					searchForReactorInterval = os.startTimer(5)
-				else
+				if pcall(isReactorStructureValid) then
+					pcall(modifyControlRodIndex)
 					print('[INFO] Adjusted control rods for new reactor configuration.')
 					reactorAdjustmentInterval = os.startTimer(1)
+				else
+					print('[WARN] No reactor found or reactor structure invalid. Waiting for valid reactor structure...')
+					reactor = nil
+					searchForReactorInterval = os.startTimer(5)
 				end
 			end
 		end
