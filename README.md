@@ -7,7 +7,7 @@ ARCS was written for BigReactors version 0.4.3A using ComputerCraft CraftOS 1.7.
 In-order to connect the computer to the reactor, place the computer directly against the `Reactor Computer Port` and copy this script into your `/` or `disk/` directory. To make sure the script will run automatically whenever the computer is started, rename it to `startup` if it isn't already.
 
 ## Configuration
-Although not required, there are a few different configuration options. A configuration file named `arcs.config` will be generated in the `/` directory if a disk drive is not present, otherwise it will be generated in `disk/`.
+A configuration file named `arcs.config` will be generated in the `/` directory if a disk drive is not present, otherwise it will be generated in `disk/`.
 
 ```
 # The amount in RF that the reactor's buffer is allowed to deviate
