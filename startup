@@ -23,19 +23,19 @@ function loadConfigurationSettings()
 		
 		writeConfiguration = [[
 # The amount in RF that the reactor's buffer is allowed to deviate
-# before the program adjusts the buffer back to half-full. The drift 
-# comes from inaccuracies of power-adjustment overtime.
+# from half-full before adjustments are made. The drift comes from
+# inaccuracies in power adjustment.
 #
-# Default: 100000
-reactorBufferAllowedDrift = 100000
+# Default: 0
+reactorBufferAllowedDrift = 0
 
 # The threshold in RF that must be exceeded before any adjustments 
 # take place. Adjust this accordingly for your reactor.
 #
-# Default: 1000 
-adjustmentThreshold = 1000
+# Default: 1
+adjustmentThreshold = 1
 
-# The amount from 1-100 that the reactors control rods are 
+# The amount from 1-99 that the reactors control rods are 
 # raised/lowered by each time an adjustment is made. A higher
 # value will adjust the control rods faster albeit at the cost 
 # of accuracy.
