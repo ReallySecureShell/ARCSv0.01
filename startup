@@ -42,6 +42,19 @@ adjustmentThreshold = 1
 #
 # Default: 1
 controlRodAdjustmentAmount = 1
+
+# Emit redstone when the factor of the maximum capacity of fuel
+# divided by the current amount of fuel is greater-than or equal
+# to the specified value. Eq. getFuelAmountMax() / getFuelAmount()
+#
+# Default: 2
+emitRedstoneWhenLowOnFuel = 2
+
+# Emit redstone from the specified side. Redstone signal is
+# emitted when the reactor is low on fuel.
+#
+# Default: none
+emitRedstoneFromSide = none
 ]]
 		io.write(writeConfiguration)
 	
@@ -56,8 +69,19 @@ controlRodAdjustmentAmount = 1
 	io.input(configurationIO)
 	
 	for line in configurationIO:lines() do
-		for string in string.gmatch(line,"= (.*)") do
-			table.insert(configuration,tonumber(string))
+		for value in string.gmatch(line,"= (.*)") do
+			for varname in string.gmatch(line,"(.*) =") do
+				if varname == "emitRedstoneFromSide" then
+					if value == "front" or value == "back" or value == "left" or value == "right" or value == "top" or value == "bottom" or value == "none" then
+						table.insert(configuration,value)
+					else
+						print('[ERROR] arcs.config: emitRedstoneFromSide invalid side: ',value)
+						error()
+					end
+				else
+					table.insert(configuration,tonumber(value))
+				end
+			end
 		end
 	end
 	
@@ -188,11 +212,25 @@ while true do
 			
 			if reactor.getNumberOfControlRods() == table.getn(controlRodsArray) then
 				pcall(adjustReactorOutput)
+				
+				if reactor.getFuelAmountMax() / reactor.getFuelAmount() >= configuration[4] and configuration[5] ~= "none" then
+					if not redstone.getOutput(configuration[5]) then
+						print('[WARN] Reactor is low on fuel. Emitting redstone signal on ', configuration[5], ' side.')
+						redstone.setOutput(configuration[5],true)
+					end
+					
+				elseif configuration[5] ~= "none" then
+					if redstone.getOutput(configuration[5]) then
+						print('[INFO] Fuel level in reactor is above threshold. Disabling redstone signal.')
+						redstone.setOutput(configuration[5],false)
+					end
+				end
+				
 				reactorAdjustmentInterval = os.startTimer(1)
 			else
 				if pcall(isReactorStructureValid) then
 					pcall(modifyControlRodIndex)
-					print('[INFO] Adjusted control rods for new reactor configuration.')
+					print('[INFO] Adjusted control rod index for current reactor configuration.')
 					reactorAdjustmentInterval = os.startTimer(1)
 				else
 					print('[WARN] No reactor found or reactor structure invalid. Waiting for valid reactor structure...')
