@@ -30,4 +30,17 @@ adjustmentThreshold = 1
 #
 # Default: 1
 controlRodAdjustmentAmount = 1
+
+# Emit redstone when the factor of the maximum capacity of fuel
+# divided by the current amount of fuel is greater-than or equal
+# to the specified value. Eq. getFuelAmountMax() / getFuelAmount()
+#
+# Default: 2
+emitRedstoneWhenLowOnFuel = 2
+
+# Emit redstone from the specified side. Redstone signal is
+# emitted when the reactor is low on fuel.
+#
+# Default: none
+emitRedstoneFromSide = none
 ```
